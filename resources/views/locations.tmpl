@@ -1,0 +1,159 @@
+{{ define "script" }}
+
+function loadStations()
+{
+    $.ajax('/production/list-stations', {
+        data: {
+            'system_name': $('#system_name').val(),
+        },
+        success: function (data) {
+          var html = '<option value="0">(Whole system)</option>';
+
+          $.each(data, function (index, value) {
+            html += '<option value="' + index + '">' + value + '</option>';
+          });
+
+          $("#station-selector-list").html(html);
+          $("#station-selector-list").removeAttr('disabled');
+        },
+        error: function (data) {
+            $("#station-selector-list").empty();
+            $("#station-selector-list").attr('disabled', 'disabled');
+        }
+    });
+}
+
+$('.location-autocomplete').autoComplete({
+    minLength: 2,
+    noResultsText: '',
+    resolverSettings: {
+        url: '/production/list-systems',
+    }
+}).on('autocomplete.select', function (evt, item) {
+    loadStations();
+});
+$.ajax('/production/locations/list', {
+    success: function (data) {
+        console.log(data);
+
+        var html = '';
+        $.each(data, function (index, value) {
+          var label;
+          var colorClass;
+
+          // Build label
+          if (!value['SystemName']) {
+            label = '(Whole universe)';
+          } else if (!value['StationName']) {
+            label = value['SystemName'] + ' - ' + '(Whole system)';
+          } else {
+            label = value['SystemName'] + ' - ' + value['StationName'];
+          }
+
+          // Choose color class
+          if (!value['SystemName']) {
+            colorClass = 'border-left-primary';
+          } else if (value['SecurityStatus'] >= 0.5) {
+            colorClass = 'border-left-success';
+          } else if (value['SecurityStatus'] > 0) {
+            colorClass = 'border-left-warning';
+          } else {
+            colorClass = 'border-left-danger';
+          }
+
+          html += '<li class="list-group-item ' + colorClass + '">';
+          html += '<span class="text-primary">' + label;
+          if (value['hangar']) {
+            html += ' - Hangar ' + value['hangar'];
+          }
+          html += '</span>';
+          if (value['Label']) {
+            html += '<span class="text-secondary"> - ' + value['Label'] + '</span>';
+          }
+          html += '<a href="/production/locations/remove/' + value['ID'] + '" class="btn btn-sm btn-danger float-right py-0">Remove</a>';
+          html += '</li>';
+        });
+
+        $('#locations-list').html(html);
+    },
+    error: function (data) {
+      alert("Error while fetching locations list");
+    }
+});
+$('#system-name-search').click(function () {
+  loadStations();
+});
+
+{{ end }}
+{{ define "content" }}
+<div class="d-sm-flex align-items-center justify-content-between mb-4">
+    <h1 class="h3 mb-0 text-gray-800">Locations</h1>
+</div>
+
+<form action="/production/locations/add" method="post">
+  <div class="card">
+      <div class="card-header">
+          <h6 class="m-0 font-weight-bold text-primary">Add point of interest</h6>
+      </div>
+      <div class="card-body">
+          <div class="input-group">
+              <div class="input-group-prepend">
+                  <span class="input-group-text text-primary">System</span>
+              </div>
+              <input type="text" name="system_name" id="system_name" class="form-control bg-light location-autocomplete" placeholder="Start typing name..." aria-label="Add" autocomplete="off">
+              <div class="input-group-append">
+                  <button class="btn btn-primary" type="button" id="system-name-search">
+                      <i class="fas fa-search fa-sm"></i>
+                  </button>
+              </div>
+          </div>
+
+          <div class="input-group mt-4 mb-4">
+              <div class="input-group-prepend">
+                  <span class="input-group-text text-primary">Station</span>
+              </div>
+
+              <select class="form-control" id="station-selector-list" name="station_id" disabled>
+              </select>
+          </div>
+
+          <div class="input-group mt-4 mb-4">
+              <div class="input-group-prepend">
+                  <span class="input-group-text text-primary">Hangar</span>
+              </div>
+
+              <select class="form-control" id="hangar-selector-list" name="hangar">
+                <option value="0">Choose ...</option>
+                <option value="1">Hangar 1</option>
+                <option value="2">Hangar 2</option>
+                <option value="3">Hangar 3</option>
+                <option value="4">Hangar 4</option>
+                <option value="5">Hangar 5</option>
+                <option value="6">Hangar 6</option>
+                <option value="7">Hangar 7</option>
+              </select>
+          </div>
+
+          <div class="input-group mb-4">
+              <div class="input-group-prepend">
+                  <span class="input-group-text text-primary">Label</span>
+              </div>
+              <input type="text" name="label" class="form-control bg-light location-autocomplete" placeholder="" aria-label="Add" autocomplete="off">
+          </div>
+
+          <button type="submit" class="btn btn-primary">Add</button>
+      </div>
+  </div>
+</form>
+
+<div class="card mt-4 mb-4">
+    <div class="card-header">
+        <h6 class="m-0 font-weight-bold text-primary">Existing points of interest</h6>
+    </div>
+    <div class="card-body">
+      <ul class="list-group" id="locations-list">
+      </ul>
+    </div>
+</div>
+
+{{ end }}

@@ -1,0 +1,115 @@
+{{ define "content" }}
+<ul class="list-group">
+
+    {{ range .production.Plans }}
+        <li data-blueprint-id="{{ .Blueprint.ID }}" class="{{ if gt .Runs 0 }} list-group-item-primary {{ end }} blueprint-list-entry list-group-item {{ if .Selected }} active {{ end }}" id="blueprint-{{ .Runs }}">
+
+            if (blueprint[runs])
+                 blueprint[total_quantity]  x
+            else
+                ( blueprint[total_quantity] ) x
+            endif
+             blueprint[product_name]
+            if (!blueprint[is_reaction])
+            , ME:  blueprint[me] , PE:  blueprint[pe]
+            endif
+            if (blueprint[materials_expandable])
+                , ( blueprint[materials_expanded] / blueprint[materials_expandable]  build)
+            endif
+            <button data-blueprint-id=" blueprint[blueprint_id] " class="blueprint-list-entry-remove btn btn-sm btn-danger float-right py-0 if(!blueprint[selected]) d-none endif" id="remove-blueprint- blueprint[blueprint_id] ">Remove</button>
+        </li>
+    {{ end }}
+
+
+    foreach (primary_blueprints as blueprint)
+        <li data-blueprint-id=" blueprint[blueprint_id] " class="if(blueprint[runs]) list-group-item-primary endif blueprint-list-entry list-group-item if(blueprint[selected]) active endif" id="blueprint- blueprint[blueprint_id] ">
+            if (blueprint[runs])
+                 blueprint[total_quantity]  x
+            else
+                ( blueprint[total_quantity] ) x
+            endif
+             blueprint[product_name]
+            if (!blueprint[is_reaction])
+            , ME:  blueprint[me] , PE:  blueprint[pe]
+            endif
+            if (blueprint[materials_expandable])
+                , ( blueprint[materials_expanded] / blueprint[materials_expandable]  build)
+            endif
+            <button data-blueprint-id=" blueprint[blueprint_id] " class="blueprint-list-entry-remove btn btn-sm btn-danger float-right py-0 if(!blueprint[selected]) d-none endif" id="remove-blueprint- blueprint[blueprint_id] ">Remove</button>
+        </li>
+    endforeach
+</ul>
+
+<div class="card mt-4">
+    <div class="card-header m-0 p-0 bg-primary text-white text-center border-0">Total materials to buy</div>
+    <div class="card-body p-1 m-0">
+        <div class="input-group input-group-sm p-1">
+            <div class="input-group-prepend">
+                <label class="input-group-text text-primary" for="selected-stockpile">Stockpile</label>
+            </div>
+            <select class="custom-select blueprint-setting-field" id="selected-stockpile">
+                <option value="0" if(selected_stockpile eq 0) selected endif>Choose ...</option>
+                foreach(locations as location)
+                    <option value="location->id" if(selected_stockpile eq location->id) selected endif> location->system_name  /  location->station_name  ( location->label )</option>
+                endforeach
+            </select>
+        </div>
+    </div>
+
+    <div class="card-body p-2 m-0">
+<textarea class="form-control rounded-0 border-1" rows="20">
+if(output_format == 0)
+Jobs to run:
+-------------------------------------
+foreach (total_jobs as job)
+if (job[runs] > 0)
+     job[runs]  x  job[name]
+endif
+endforeach
+
+Materials required:
+-------------------------------------
+foreach (total_materials as material)
+if(material[quantity])
+     material[material_name]   material[quantity] if(selected_stockpile) -  min(material[quantity], stockpiled->get(material[material_id]))  (from stockpile) =  max(0, material[quantity] - (stockpiled->get(material[material_id])))  to if (material[build])build else""buy endif  endif
+
+endif
+endforeach
+elseif(output_format == 1)
+foreach (total_materials as material)
+if (!material[build] && (material[quantity] - stockpiled->get(material[material_id]) > 0))
+ material[material_name]   material[quantity] - stockpiled->get(material[material_id])
+endif
+endforeach
+endif
+</textarea>
+    </div>
+    <div class="card-body p-1 m-0">
+        <div class="btn-toolbar p-1" role="toolbar">
+            <div class="btn-group mr-2" role="group">
+                <button type="button" class="output-format-btn btn btn-outline-secondary if(output_format == 0) active endif" data-output-format="0">Full output</button>
+                <button type="button" class="output-format-btn btn btn-outline-secondary if(output_format == 1) active endif" data-output-format="1">Multi-buy</button>
+            </div>
+        </div>
+    </div>
+    <div class="card-body m-0 p-0 bg-primary text-white text-center border-0">Add to tracker</div>
+    <div class="card-body p-1 m-0">
+        <form action="/production/calculator/track-jobs" method="get">
+            <div class="input-group input-group-sm p-1">
+                <div class="input-group-prepend">
+                    <label class="input-group-text text-primary" for="selected-team">Tracked characters</label>
+                </div>
+                <select class="custom-select" id="selected-team" name="selected-team">
+                    foreach(teams as team)
+                        <option value=" team->id "> team->name </option>
+                    endforeach
+                </select>
+                <div class="input-group-append">
+                    <button class="btn btn-outline-secondary" type="submit" id="track-jobs-btn">Add</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{{ end }}

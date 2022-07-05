@@ -1,0 +1,233 @@
+{{ define "css" }}
+
+.production-card .production-card {
+    border-right-width: 0
+}
+
+.card-horizontal {
+    display: flex;
+    flex: 1 1 auto;
+}
+
+{{ end }}
+{{ define "script" }}
+
+reloadBlueprintCard();
+reloadBlueprintList();
+
+function loadBlueprintCard(id)
+{
+    $('#blueprint-card').load('/production/calculator/render-blueprint-card', {
+        'blueprint_id': id,
+    });
+}
+
+function reloadBlueprintCard()
+{
+    $('#blueprint-card').load('/production/calculator/render-blueprint-card');
+}
+
+function reloadBlueprintList()
+{
+    $('#blueprint-list').load('/production/calculator/render-blueprint-list');
+}
+function addBlueprint()
+{
+    $.ajax('/production/calculator/add-blueprint', {
+        data: {
+            'blueprint_name': $('#blueprint_name').val(),
+        },
+        method: 'post',
+        success: function (data) {
+            $('#blueprint-list').html(data);
+            reloadBlueprintCard();
+        },
+        error: function (data) {
+            alert('Error while adding blueprint');
+        }
+    });
+}
+
+$('.blueprint-autocomplete').autoComplete({
+    minLength: 3,
+    noResultsText: '',
+    resolverSettings: {
+        url: '/production/list-blueprints',
+    }
+}).on('autocomplete.select', function (evt, item) {
+    addBlueprint();
+});
+
+$(document).on('click', '.blueprint-list-entry', function () {
+    $('.blueprint-list-entry').removeClass('active');
+    $(this).addClass('active');
+
+    $('.blueprint-list-entry-remove').addClass('d-none');
+    $('#remove-' + $(this).attr('id')).removeClass('d-none');
+
+    loadBlueprintCard($(this).data('blueprint-id'));
+});
+
+$(document).on('click', '.blueprint-list-entry-remove', function () {
+    $.ajax('/production/calculator/remove-blueprint', {
+        data: {
+            'blueprint_id': $(this).data('blueprint-id'),
+        },
+        method: 'post',
+        success: function (data) {
+            $('#blueprint-list').html(data);
+            reloadBlueprintCard();
+        },
+        error: function (data) {
+            alert('Error while removing blueprint');
+        }
+    });
+});
+
+$(document).on('click', '.blueprint-secondary-add', function () {
+    var blueprintID = $(this).data('blueprint-id');
+    var buildMode = $(this).data('build-mode');
+
+    $.ajax('/production/calculator/add-secondary-blueprint', {
+        data: {
+            'blueprint_id': blueprintID,
+            'build-mode': buildMode,
+        },
+        method: 'get',
+        success: function (data) {
+            $('#blueprint-list').html(data);
+
+            var buildButtonClass = '.blueprint-secondary-add[data-blueprint-id="' + blueprintID + '"]';
+            var buyButtonClass = '.blueprint-secondary-remove[data-blueprint-id="' + blueprintID + '"]';
+
+            $(buildButtonClass).removeClass('btn-outline-primary');
+            $(buildButtonClass).addClass('btn-primary');
+
+            $(buyButtonClass).addClass('btn-outline-primary');
+            $(buyButtonClass).removeClass('btn-primary');
+
+            reloadBlueprintCard();
+        },
+    });
+});
+
+$(document).on('click', '.blueprint-secondary-remove', function () {
+    var blueprintID = $(this).data('blueprint-id');
+
+    $.ajax('/production/calculator/remove-secondary-blueprint', {
+        data: {
+            'blueprint_id': blueprintID
+        },
+        method: 'get',
+        success: function (data) {
+            $('#blueprint-list').html(data);
+
+            var buildButtonClass = '.blueprint-secondary-add[data-blueprint-id="' + blueprintID + '"]';
+            var buyButtonClass = '.blueprint-secondary-remove[data-blueprint-id="' + blueprintID + '"]';
+
+            $(buildButtonClass).addClass('btn-outline-primary');
+            $(buildButtonClass).removeClass('btn-primary');
+
+            $(buyButtonClass).removeClass('btn-outline-primary');
+            $(buyButtonClass).addClass('btn-primary');
+
+            reloadBlueprintList();
+            reloadBlueprintCard();
+        },
+    });
+});
+
+$(document).on('change', '.blueprint-setting-field', function () {
+    $.ajax('/production/calculator/change-blueprint-settings', {
+        data: {
+            'me': $('#blueprint-me').val(),
+            'pe': $('#blueprint-pe').val(),
+            'runs': $('#blueprint-runs').val(),
+            'decryptor': $('#blueprint-decryptor').val(),
+        },
+        method: 'get',
+        success: function () {
+            reloadBlueprintCard();
+            reloadBlueprintList();
+        },
+    });
+});
+
+$(document).on('change', '#selected-stockpile', function () {
+    $.ajax('/production/calculator/change-stockpile', {
+        data: {
+            'stockpile': $('#selected-stockpile').val()
+        },
+        method: 'get',
+        success: function () {
+            reloadBlueprintCard();
+            reloadBlueprintList();
+        }
+    });
+});
+
+
+$(document).on('click', '.output-format-btn', function () {
+    $.ajax('/production/calculator/change-format', {
+        data: {
+            'format': $(this).data('output-format')
+        },
+        method: 'get',
+        success: function () {
+            reloadBlueprintList();
+        }
+    });
+});
+
+$(document).on('click', '.blueprint-setting-change', function () {
+    var offset = parseInt($(this).data('value'));
+    var field = '#blueprint-' + $(this).data('field');
+    var current = parseInt($(field).val());
+    var minValue = $(field).data('value-min');
+    var maxValue = $(field).data('value-max');
+
+    if ((typeof minValue === 'undefined' || current + offset >= minValue) && (typeof maxValue === 'undefined' || current + offset <= maxValue)) {
+        $(field).val(current + offset);
+        $.ajax('/production/calculator/change-blueprint-settings', {
+            data: {
+                'me': $('#blueprint-me').val(),
+                'pe': $('#blueprint-pe').val(),
+                'runs': $('#blueprint-runs').val(),
+                'decryptor': $('#blueprint-decryptor').val(),
+            },
+            method: 'get',
+            success: function () {
+                reloadBlueprintCard();
+                reloadBlueprintList();
+            },
+        });
+    }
+});
+
+{{ end }}
+{{ define "content" }}
+
+    <div class="input-group">
+        <div class="input-group-prepend">
+            <span class="input-group-text text-primary">Blueprint</span>
+        </div>
+        <input type="text" name="blueprint_name" id="blueprint_name" class="form-control bg-light blueprint-autocomplete" placeholder="Start typing name..." aria-label="Add" autocomplete="off">
+        <div class="input-group-append">
+            <button class="btn btn-primary" type="button" id="calculate-search">
+                <i class="fas fa-search fa-sm"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="row">
+        <div id="blueprint-list" class="w-50 mt-5 col-sm">
+            @inject('Controller', 'App\Http\Controllers\ProductionController')
+            {!! $Controller->renderBlueprintList(request()) !!}
+        </div>
+
+        <div id="blueprint-card" class="col-sm m-5 p-0">
+            TUTAJ
+        </div>
+    </div>
+
+{{ end }}

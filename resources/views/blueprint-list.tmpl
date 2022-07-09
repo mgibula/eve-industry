@@ -48,8 +48,8 @@ Jobs to run:
 {{ end }}
 Materials required:
 -------------------------------------
-{{ range .materials }}    {{ .MaterialName }}  {{ .Quantity }}
-{{ end }}
+{{ range .materials }}{{ if not .IsBuilt }}{{ .MaterialName }}  {{ .Quantity }}
+{{ end }}{{ end }}
 </textarea>
     </div>
     <div class="card-body p-1 m-0">

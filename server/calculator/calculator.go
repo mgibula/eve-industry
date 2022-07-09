@@ -1,8 +1,8 @@
 package calculator
 
 import (
-	"log"
 	"math"
+	"sort"
 
 	"github.com/mgibula/eve-industry/server/db"
 	"gorm.io/gorm"
@@ -108,18 +108,12 @@ func (c *MaterialCalculator) AddQuantity(itemID uint64, name string, quantity in
 	material.addQuantity(quantity, is_primary)
 }
 
-func (c *MaterialCalculator) DebugDump() {
-	for _, material := range c.Materials {
-		log.Println("Material", material.MaterialName, " = ", material.Quantity)
-	}
-}
-
 func (c *MaterialCalculator) GetMaterialInfo(itemID uint64) *Material {
 	return c.Materials[itemID]
 }
 
-func (c *MaterialCalculator) GetExcess() map[uint64]MaterialInfo {
-	result := make(map[uint64]MaterialInfo)
+func (c *MaterialCalculator) GetExcess() []MaterialInfo {
+	result := make([]MaterialInfo, 0)
 
 	for _, material := range c.Materials {
 		excess := material.Excess
@@ -138,14 +132,18 @@ func (c *MaterialCalculator) GetExcess() map[uint64]MaterialInfo {
 			info.MaterialBlueprintID = material.BlueprintInfo.ID
 		}
 
-		result[info.MaterialID] = info
+		result = append(result, info)
 	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Quantity > result[j].Quantity
+	})
 
 	return result
 }
 
-func (c *MaterialCalculator) GetMaterials() map[uint64]MaterialInfo {
-	result := make(map[uint64]MaterialInfo)
+func (c *MaterialCalculator) GetMaterials() []MaterialInfo {
+	result := make([]MaterialInfo, 0)
 
 	for _, requiredMaterial := range c.Materials {
 		info := MaterialInfo{
@@ -160,14 +158,18 @@ func (c *MaterialCalculator) GetMaterials() map[uint64]MaterialInfo {
 			info.IsBuilt = (c.GetBlueprintSettings(requiredMaterial.BlueprintInfo.ID) != nil)
 		}
 
-		result[requiredMaterial.MaterialID] = info
+		result = append(result, info)
 	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Quantity > result[j].Quantity
+	})
 
 	return result
 }
 
-func (c *MaterialCalculator) GetMaterialsFor(itemID uint64) map[uint64]MaterialInfo {
-	result := make(map[uint64]MaterialInfo)
+func (c *MaterialCalculator) GetMaterialsFor(itemID uint64) []MaterialInfo {
+	result := make([]MaterialInfo, 0)
 
 	calculatedMaterials := c.Materials[itemID].getCalculatedMaterialsforProduction()
 
@@ -180,14 +182,18 @@ func (c *MaterialCalculator) GetMaterialsFor(itemID uint64) map[uint64]MaterialI
 			IsBuilt:             (c.GetBlueprintSettings(requiredMaterial.MaterialBlueprintId) != nil),
 		}
 
-		result[requiredMaterial.MaterialId] = info
+		result = append(result, info)
 	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Quantity > result[j].Quantity
+	})
 
 	return result
 }
 
-func (c *MaterialCalculator) GetJobsInfo() map[uint64]JobInfo {
-	result := make(map[uint64]JobInfo)
+func (c *MaterialCalculator) GetJobsInfo() []JobInfo {
+	result := make([]JobInfo, 0)
 
 	for _, material := range c.Materials {
 		if material.BlueprintInfo == nil {
@@ -210,8 +216,12 @@ func (c *MaterialCalculator) GetJobsInfo() map[uint64]JobInfo {
 			PE:              settings.PE,
 		}
 
-		result[material.BlueprintInfo.ID] = info
+		result = append(result, info)
 	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ProductQuantity > result[j].ProductQuantity
+	})
 
 	return result
 }

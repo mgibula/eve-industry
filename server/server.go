@@ -115,14 +115,6 @@ func IndexController(c *gin.Context) {
 	if exists {
 		// esi := esi.NewESIClient(db.OpenEveDatabase(), maybe_user.(db.ESIUser))
 		// esi.ListSkills()
-
-		calculator := calculator.NewMaterialCalculator()
-		calculator.AddBlueprintSettings(1079, 10, 10, 0, true)
-		calculator.AddBlueprintSettings(1080, 2, 4, 0, true)
-		calculator.AddQuantity(448, "Warp Scrambler II", 100, true)
-
-		calculator.DebugDump()
-
 	}
 
 	layout.Render(c, "default/login.tmpl", gin.H{})

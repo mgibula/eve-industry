@@ -17,7 +17,6 @@ type productionPlan struct {
 	PE        int32
 	Selected  bool
 	Decryptor uint64
-	Jobs      uint32
 
 	// Filled for templates
 	TotalQuantity  int64
@@ -25,6 +24,7 @@ type productionPlan struct {
 	AdditionalRuns int64
 	Buildable      int64
 	Built          int64
+	Jobs           []int64
 }
 
 type productionPlans struct {
@@ -47,7 +47,6 @@ func (l *productionPlans) addBlueprint(blueprint db.EVEBlueprint, runs int64, me
 			ME:        me,
 			PE:        pe,
 			Selected:  false,
-			Jobs:      1,
 		})
 	}
 
@@ -338,6 +337,7 @@ func renderBlueprintCard(c *gin.Context) {
 		plan.AdditionalRuns = info.GetTotalRuns() - plan.Runs
 		plan.Buildable = info.GetBuildibleSubmaterials()
 		plan.Built = info.GetBuiltSubmaterials()
+		plan.Jobs = info.Jobs
 	}
 
 	evedb := db.OpenEveDatabase()

@@ -8,6 +8,7 @@ import (
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type EVERegion struct {
@@ -40,9 +41,9 @@ type EVEBlueprint struct {
 	Reaction                           uint32
 	ManufacturingProductId             uint64
 	ManufacturingProductName           string
-	ManufacturingProductOutputQuantity uint32
+	ManufacturingProductOutputQuantity int64
 	MetaGroup                          uint32
-	ManufacturingMaxRuns               uint32
+	ManufacturingMaxRuns               int64
 }
 
 const (
@@ -61,7 +62,7 @@ const (
 	MetaGroupStructureTech1   = 54
 )
 
-func (b *EVEBlueprint) GetDefaultME() uint32 {
+func (b *EVEBlueprint) GetDefaultME() int32 {
 	if b.Reaction > 0 {
 		return 0
 	} else if b.MetaGroup == MetaGroupTech1 {
@@ -73,7 +74,7 @@ func (b *EVEBlueprint) GetDefaultME() uint32 {
 	}
 }
 
-func (b *EVEBlueprint) GetDefaultPE() uint32 {
+func (b *EVEBlueprint) GetDefaultPE() int32 {
 	if b.Reaction > 0 {
 		return 0
 	} else if b.MetaGroup == MetaGroupTech1 {
@@ -85,15 +86,15 @@ func (b *EVEBlueprint) GetDefaultPE() uint32 {
 	}
 }
 
-func (b *EVEBlueprint) GetDefaultMaxRuns() uint32 {
+func (b *EVEBlueprint) GetDefaultMaxRuns() int64 {
 	if b.Reaction > 0 {
-		return math.MaxUint32
+		return math.MaxInt64
 	} else if b.MetaGroup == MetaGroupTech1 {
 		return math.MaxUint32
 	} else if b.MetaGroup == MetaGroupTech2 {
 		return b.ManufacturingMaxRuns
 	} else {
-		return math.MaxUint32
+		return math.MaxInt64
 	}
 }
 
@@ -111,9 +112,9 @@ type EVEMaterial struct {
 	ActivityId                      uint32
 	MaterialName                    string
 	MaterialId                      uint64
-	Quantity                        uint32
+	Quantity                        int64
 	MaterialBlueprintId             uint64
-	MaterialBlueprintOutputQuantity uint32
+	MaterialBlueprintOutputQuantity int64
 }
 
 type EVEDecryptor struct {
@@ -143,7 +144,9 @@ type Location struct {
 }
 
 func OpenEveDatabase() *gorm.DB {
-	db, err := gorm.Open(sqlite.Open("resources/eve.db"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open("resources/eve.db"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -279,12 +282,12 @@ func CookDatabase(path string) {
 		rows, err := source.Raw(`
 			select distinct ia.typeID as id,
 				it.typeName as name,
-				(select time from industryActivity where typeID = ia.typeID and activityID = 1) as manufacturing,
-				(select time from industryActivity where typeID = ia.typeID and activityID = 3) as time_research,
-				(select time from industryActivity where typeID = ia.typeID and activityID = 4) as material_research,
-				(select time from industryActivity where typeID = ia.typeID and activityID = 5) as copying,
-				(select time from industryActivity where typeID = ia.typeID and activityID = 8) as invention,
-				(select time from industryActivity where typeID = ia.typeID and activityID = 11) as reactions,
+				coalesce((select time from industryActivity where typeID = ia.typeID and activityID = 1), 0) as manufacturing,
+				coalesce((select time from industryActivity where typeID = ia.typeID and activityID = 3), 0) as time_research,
+				coalesce((select time from industryActivity where typeID = ia.typeID and activityID = 4), 0) as material_research,
+				coalesce((select time from industryActivity where typeID = ia.typeID and activityID = 5), 0) as copying,
+				coalesce((select time from industryActivity where typeID = ia.typeID and activityID = 8), 0) as invention,
+				coalesce((select time from industryActivity where typeID = ia.typeID and activityID = 11), 0) as reactions,
 				(select productTypeID from industryActivityProducts where typeID = ia.typeID and (activityID = 1 or activityID = 11)) as manufacturing_product_id,
 				(select typeName from invTypes where published = '1' and typeID in (select productTypeID from industryActivityProducts where typeID = ia.typeID and (activityID = 1 or activityID = 11)) ) as manufacturing_product_name,
 				(select quantity from industryActivityProducts where typeID = ia.typeID and (activityID = 1 or activityID = 11)) as manufacturing_product_output_quantity,

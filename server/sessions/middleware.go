@@ -9,8 +9,9 @@ import (
 )
 
 type Session struct {
-	store   *gormstore.Store
-	session *gorilla.Session
+	store      *gormstore.Store
+	session    *gorilla.Session
+	ginContext *gin.Context
 }
 
 func (s *Session) Get(name string) any {
@@ -25,6 +26,10 @@ func (s *Session) Delete(name string) {
 	delete(s.session.Values, name)
 }
 
+func (s *Session) Save() {
+	s.session.Save(s.ginContext.Request, s.ginContext.Writer)
+}
+
 const GinKey = "github.com/mgibula/eve-industry/server/sessions"
 
 func OpenSession(c *gin.Context) *Session {
@@ -34,23 +39,18 @@ func OpenSession(c *gin.Context) *Session {
 
 func Middleware(store *gormstore.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
-
 		handler := Session{}
 		handler.store = store
+		handler.ginContext = c
 
 		session, err := store.Get(c.Request, "SESSID")
 		if err != nil {
-			log.Fatalln(err)
+			log.Fatalln("Session store get", err)
 		}
 
 		handler.session = session
 
 		c.Set(GinKey, &handler)
 		c.Next()
-
-		err = handler.session.Save(c.Request, c.Writer)
-		if err != nil {
-			log.Println(err)
-		}
 	}
 }

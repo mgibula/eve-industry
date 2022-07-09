@@ -2,42 +2,26 @@
 <ul class="list-group">
 
     {{ range .production.Plans }}
-        <li data-blueprint-id="{{ .Blueprint.ID }}" class="{{ if gt .Runs 0 }} list-group-item-primary {{ end }} blueprint-list-entry list-group-item {{ if .Selected }} active {{ end }}" id="blueprint-{{ .Runs }}">
+        <li data-blueprint-id="{{ .Blueprint.ID }}" class="{{ if gt .Runs 0 }} list-group-item-primary {{ end }} blueprint-list-entry list-group-item {{ if .Selected }} active {{ end }}" id="blueprint-{{ .Blueprint.ID }}">
 
-            if (blueprint[runs])
-                 blueprint[total_quantity]  x
-            else
-                ( blueprint[total_quantity] ) x
-            endif
-             blueprint[product_name]
-            if (!blueprint[is_reaction])
-            , ME:  blueprint[me] , PE:  blueprint[pe]
-            endif
-            if (blueprint[materials_expandable])
-                , ( blueprint[materials_expanded] / blueprint[materials_expandable]  build)
-            endif
-            <button data-blueprint-id=" blueprint[blueprint_id] " class="blueprint-list-entry-remove btn btn-sm btn-danger float-right py-0 if(!blueprint[selected]) d-none endif" id="remove-blueprint- blueprint[blueprint_id] ">Remove</button>
+            {{ if gt .Runs 0 }}
+                {{ .TotalQuantity }} x
+            {{ else }}
+                ( {{ .TotalQuantity }} ) x
+            {{ end }}
+            {{ .Blueprint.ManufacturingProductName }}
+
+            {{ if ne .Blueprint.IsReaction true }}
+                , ME: {{ .ME }}, PE: {{ .PE }}
+            {{ end }}
+
+            {{ if gt .Buildable 0 }}
+                , ( {{ .Built }} / {{ .Buildable }} build)
+            {{ end }}
+
+            <button data-blueprint-id="{{ .Blueprint.ID }}" class="blueprint-list-entry-remove btn btn-sm btn-danger float-right py-0 {{ if not .Selected }} d-none {{ end }}" id="remove-blueprint-{{ .Blueprint.ID }}">Remove</button>
         </li>
     {{ end }}
-
-
-    foreach (primary_blueprints as blueprint)
-        <li data-blueprint-id=" blueprint[blueprint_id] " class="if(blueprint[runs]) list-group-item-primary endif blueprint-list-entry list-group-item if(blueprint[selected]) active endif" id="blueprint- blueprint[blueprint_id] ">
-            if (blueprint[runs])
-                 blueprint[total_quantity]  x
-            else
-                ( blueprint[total_quantity] ) x
-            endif
-             blueprint[product_name]
-            if (!blueprint[is_reaction])
-            , ME:  blueprint[me] , PE:  blueprint[pe]
-            endif
-            if (blueprint[materials_expandable])
-                , ( blueprint[materials_expanded] / blueprint[materials_expandable]  build)
-            endif
-            <button data-blueprint-id=" blueprint[blueprint_id] " class="blueprint-list-entry-remove btn btn-sm btn-danger float-right py-0 if(!blueprint[selected]) d-none endif" id="remove-blueprint- blueprint[blueprint_id] ">Remove</button>
-        </li>
-    endforeach
 </ul>
 
 <div class="card mt-4">
@@ -58,30 +42,14 @@
 
     <div class="card-body p-2 m-0">
 <textarea class="form-control rounded-0 border-1" rows="20">
-if(output_format == 0)
 Jobs to run:
 -------------------------------------
-foreach (total_jobs as job)
-if (job[runs] > 0)
-     job[runs]  x  job[name]
-endif
-endforeach
-
+{{ range .jobs }}    {{ .Runs }} x {{ .BlueprintName }}
+{{ end }}
 Materials required:
 -------------------------------------
-foreach (total_materials as material)
-if(material[quantity])
-     material[material_name]   material[quantity] if(selected_stockpile) -  min(material[quantity], stockpiled->get(material[material_id]))  (from stockpile) =  max(0, material[quantity] - (stockpiled->get(material[material_id])))  to if (material[build])build else""buy endif  endif
-
-endif
-endforeach
-elseif(output_format == 1)
-foreach (total_materials as material)
-if (!material[build] && (material[quantity] - stockpiled->get(material[material_id]) > 0))
- material[material_name]   material[quantity] - stockpiled->get(material[material_id])
-endif
-endforeach
-endif
+{{ range .materials }}    {{ .MaterialName }}  {{ .Quantity }}
+{{ end }}
 </textarea>
     </div>
     <div class="card-body p-1 m-0">

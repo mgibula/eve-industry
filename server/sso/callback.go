@@ -166,6 +166,8 @@ func ssoCallbackHandler(c *gin.Context) {
 		manager.Create(&esiUser)
 	}
 
+	log.Println("Logging", esiUser.CharacterName)
+
 	loggedCharacters, exists := session.Get("available_users").([]db.ESIUser)
 	if !exists {
 		loggedCharacters = make([]db.ESIUser, 0)
@@ -174,6 +176,7 @@ func ssoCallbackHandler(c *gin.Context) {
 	loggedCharacters = append(loggedCharacters, esiUser)
 	session.Set("available_users", uniqueUsers(loggedCharacters))
 	session.Set("current_user", esiUser)
+	session.Save()
 
 	c.Redirect(http.StatusFound, "/")
 }

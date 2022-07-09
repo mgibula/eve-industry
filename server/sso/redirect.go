@@ -41,6 +41,7 @@ func ssoRedirectHandler(c *gin.Context) {
 	query.RawQuery = queryString.Encode()
 	session := sessions.OpenSession(c)
 	session.Set("sso_state", ssoState)
+	session.Save()
 
 	c.Redirect(http.StatusFound, query.String())
 }

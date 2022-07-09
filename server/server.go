@@ -15,7 +15,6 @@ import (
 	"github.com/mgibula/eve-industry/server/calculator"
 	"github.com/mgibula/eve-industry/server/config"
 	"github.com/mgibula/eve-industry/server/db"
-	"github.com/mgibula/eve-industry/server/esi"
 	"github.com/mgibula/eve-industry/server/layout"
 	"github.com/mgibula/eve-industry/server/locations"
 	"github.com/mgibula/eve-industry/server/sessions"
@@ -112,11 +111,18 @@ func (s *Server) Run(listen string) {
 }
 
 func IndexController(c *gin.Context) {
-	maybe_user, exists := c.Get("user")
-
+	_, exists := c.Get("user")
 	if exists {
-		esi := esi.NewESIClient(db.OpenEveDatabase(), maybe_user.(db.ESIUser))
-		esi.ListSkills()
+		// esi := esi.NewESIClient(db.OpenEveDatabase(), maybe_user.(db.ESIUser))
+		// esi.ListSkills()
+
+		calculator := calculator.NewMaterialCalculator()
+		calculator.AddBlueprintSettings(1079, 10, 10, 0, true)
+		calculator.AddBlueprintSettings(1080, 2, 4, 0, true)
+		calculator.AddQuantity(448, "Warp Scrambler II", 100, true)
+
+		calculator.DebugDump()
+
 	}
 
 	layout.Render(c, "default/login.tmpl", gin.H{})

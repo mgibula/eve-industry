@@ -1,25 +1,25 @@
 {{ define "content" }}
    <div class="card">
-        <div class="card-header m-0 p-0 bg-primary text-white text-center border-0"> blueprint_name </div>
+        <div class="card-header m-0 p-0 bg-primary text-white text-center border-0">{{ .plan.Blueprint.Name }}</div>
         <div class="card-horizontal align-top">
             <div class="img-square-wrapper">
-                <img src="https://images.evetech.net/types/ blueprint_id /bp?size=64">
+                <img src="https://images.evetech.net/types/{{ .plan.Blueprint.ID }}/bp?size=64">
             </div>
             <div class="card-body p-1 text-left text-nowrap">
-                <h5 class="m-0 card-title text-primary"> quantity   product_name </h5>
+                <h5 class="m-0 card-title text-primary"> {{ .plan.TotalQuantity }} {{ .plan.Blueprint.ManufacturingProductName }}</h5>
                 <p class="m-0 text-secondary">
                 {{ if eq .plan.Runs 1 }}
                     {{ .plan.Runs }} run requested
                 {{ else }}
                     {{ .plan.Runs }} runs requested
                 {{ end }}
-                if (total_runs != runs )
-                    if (runs > 0)
-                        <small> (+  total_runs - runs  runs for production)</small>
-                    else
-                        ( total_runs - runs  runs for production)
-                    endif
-                endif
+                {{ if ne .plan.TotalRuns .plan.Runs }}
+                    {{ if gt .plan.Runs 0 }}
+                        <small>(+ {{ .plan.AdditionalRuns }} runs for production)</small>
+                    {{ else }}
+                        ( {{ .plan.AdditionalRuns }} runs for production)
+                    {{ end }}
+                {{ end }}
                 .
                 {{ .plan.Jobs }}  jobs required
                 </p>
@@ -29,11 +29,11 @@
             <h6 class="bg-primary text-white text-center m-0"><small>Settings</small></h6>
             <div class="container">
                 <div class="row">
-                if (is_reaction)
+                {{ if .plan.Blueprint.IsReaction }}
                     <input type="hidden" id="blueprint-me" value="0"/>
                     <input type="hidden" id="blueprint-pe" value="0"/>
                     <input type="hidden" id="blueprint-decryptor" value="0"/>
-                elseif (is_tech2)
+                {{ else if .plan.Blueprint.IsTech2 }}
                     <input type="hidden" id="blueprint-me" value="2"/>
                     <input type="hidden" id="blueprint-pe" value="4"/>
 
@@ -42,44 +42,48 @@
                             <label class="input-group-text text-primary" for="blueprint-decryptor">Decryptor</label>
                         </div>
                         <select class="custom-select blueprint-setting-field" id="blueprint-decryptor">
-                            <option value="0">None (ME: 2, PE: 4)</option>
+                            <option value="0" {{ if eq .plan.Decryptor 0 }}selected{{ end }}>None (ME: 2, PE: 4)</option>
 
-                        foreach (decryptors as decryptor)
-                            <option value="decryptor[id]"> decryptor[name]  (
-                                if (decryptor[probability_modifier] != 1.0)
-                                   xdecryptor[probability_modifier] chance,
-                                endif
-                                if (decryptor[me_modifier] > 0)
-                                    +decryptor[me_modifier] ME
-                                elseif (decryptor[me_modifier] < 0)
-                                    decryptor[me_modifier] ME
-                                endif
-                                if (decryptor[runs_modifier] != 0 || decryptor[pe_modifier] != 0), endif
-                                if (decryptor[pe_modifier])
-                                    if (decryptor[pe_modifier] > 0)
-                                        +decryptor[pe_modifier] PE
-                                    elseif (decryptor[pe_modifier] < 0)
-                                        decryptor[pe_modifier] PE
-                                    endif
-                                    if (decryptor[runs_modifier] != 0), endif
-                                endif
-                                if (decryptor[runs_modifier] > 0)
-                                    +decryptor[runs_modifier] runs
-                                elseif (decryptor[runs_modifier] < 0)
-                                    -decryptor[runs_modifier] runs
-                                endif
+                        {{ range $.decryptors }}
+                            <option value="{{ .ID }}" {{ if eq $.plan.Decryptor .ID }}selected{{ end }}>{{ .Name }}  (
+                                {{ if ne .ProbabilityModifier 1.0 }}
+                                    x {{ .ProbabilityModifier }} chance,
+                                {{ end }}
+
+                                {{ if gt .MEModifier 0 }}
+                                    +{{ .MEModifier }} ME
+                                {{ else if lt .MEModifier 0 }}
+                                    {{ .MEModifier }} ME
+                                {{ end }}
+
+                                {{ if or (ne .RunsModifier 0) (ne .PEModifier 0) }}, {{ end }}
+
+                                {{ if ne .PEModifier 0 }}
+                                    {{ if gt .PEModifier 0 }}
+                                        +{{ .PEModifier }} PE
+                                    {{ else if lt .PEModifier 0 }}
+                                        {{ .PEModifier }} PE
+                                    {{ end }}
+                                    {{ if ne .RunsModifier 0 }}, {{ end }}
+                                {{ end }}
+
+                                {{ if gt .RunsModifier 0 }}
+                                    +{{ .RunsModifier }} runs
+                                {{ else if lt .RunsModifier 0 }}
+                                    {{ .RunsModifier }} runs
+                                {{ end }}
                             )</option>
-                        endforeach
+                        {{ end }}
                         </select>
                     </div>
 
-                else
+                {{ else }}
                     <div class="input-group input-group-sm p-1 col">
                         <div class="input-group-prepend">
                             <span class="input-group-text text-primary">ME</span>
                             <button class="input-group-text text-primary blueprint-setting-change" data-value="-1" data-field="me">-</button>
                         </div>
-                        <input type="text" class="form-control blueprint-setting-field" data-value-min="0" data-value-max="10" id="blueprint-me" value=" me ">
+                        <input type="text" class="form-control blueprint-setting-field" data-value-min="0" data-value-max="10" id="blueprint-me" value="{{ .plan.ME }}">
                         <div class="input-group-append">
                             <button class="input-group-text text-primary blueprint-setting-change" data-value="1" data-field="me">+</button>
                         </div>
@@ -89,18 +93,18 @@
                             <span class="input-group-text text-primary">PE</span>
                             <button class="input-group-text text-primary blueprint-setting-change" data-value="-1" data-field="pe">-</button>
                         </div>
-                        <input type="text" class="form-control blueprint-setting-field" data-value-min="0" data-value-max="10" id="blueprint-pe" value=" pe ">
+                        <input type="text" class="form-control blueprint-setting-field" data-value-min="0" data-value-max="10" id="blueprint-pe" value="{{ .plan.PE }}">
                         <div class="input-group-append">
                             <button class="input-group-text text-primary blueprint-setting-change" data-value="1" data-field="pe">+</button>
                         </div>
                     </div>
-                endif
+                {{ end }}
                     <div class="input-group  input-group-sm p-1 col">
                         <div class="input-group-prepend">
                             <span class="input-group-text text-primary">Runs</span>
                             <button class="input-group-text text-primary blueprint-setting-change" data-value="-1" data-field="runs">-</button>
                         </div>
-                        <input type="text" class="form-control blueprint-setting-field" data-value-min="0" id="blueprint-runs" value=" runs ">
+                        <input type="text" class="form-control blueprint-setting-field" data-value-min="0" id="blueprint-runs" value="{{ .plan.Runs }}">
                         <div class="input-group-append">
                             <button class="input-group-text text-primary blueprint-setting-change" data-value="1" data-field="runs">+</button>
                         </div>
@@ -111,74 +115,53 @@
         <div class="card-footer bg-transparent border-0 p-0 m-0">
             <h6 class="bg-primary text-white text-center m-0"><small>Resources</small></h6>
             <ul class="list-group rounded-0">
-            foreach (materials as material)
+            {{ range .materials }}
                 <li class="list-group-item p-0">
-                    <img src="https://images.evetech.net/types/ material[material_id] /icon?size=32">
-                     material[quantity]  x  material[material_name]  -
-                    if(material[material_cost_for_consumed] != material[material_cost_for_produced])
-                         Price::format(material[material_cost_for_produced])  ( Price::format(material[material_cost_for_consumed])  required) ISK
-                    else
-                         Price::format(material[material_cost_for_consumed])  ISK
-                    endif
-                if (material[material_blueprint_id])
-                    <button class="btn btn-sm btn-outline-primary float-right py-0 my-1 mx-1 dropdown-toggle dropdown-toggle-split" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                        if (!material[build])
-                            Buy
-                        else
-                            Build
-                        endif
-                    </button>
-                    <div class="dropdown-menu">
-                        <a data-build-mode="all" data-blueprint-id=" material[material_blueprint_id] " class="dropdown-item blueprint-secondary-remove" href="#">Buy</a>
-                        <a data-build-mode="all" data-blueprint-id=" material[material_blueprint_id] " class="dropdown-item blueprint-secondary-add" href="#">Build</a>
-                    </div>
-                endif
+                    <img src="https://images.evetech.net/types/{{ .MaterialID }}/icon?size=32">
+                    {{ .Quantity }} x {{ .MaterialName }}
+
+                    {{ if gt .MaterialBlueprintID 0 }}
+                        <button class="btn btn-sm btn-outline-primary float-right py-0 my-1 mx-1 dropdown-toggle dropdown-toggle-split" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            {{ if not .IsBuilt }}
+                                Buy
+                            {{ else }}
+                                Build
+                            {{ end }}
+                        </button>
+                        <div class="dropdown-menu">
+                            <a data-build-mode="all" data-blueprint-id="{{ .MaterialBlueprintID }}" class="dropdown-item blueprint-secondary-remove" href="#">Buy</a>
+                            <a data-build-mode="all" data-blueprint-id="{{ .MaterialBlueprintID }}" class="dropdown-item blueprint-secondary-add" href="#">Build</a>
+                        </div>
+                    {{ end }}
                 </li>
-            endforeach
+            {{ end }}
         </div>
     </div>
     <div class="card mt-2">
         <div class="card-header m-0 p-0 bg-primary text-white text-center border-0">Total output</div>
         <div class="card-body p-0 m-0">
             <ul class="list-group p-0 rounded-0">
-                foreach (requested_products as product)
+                {{ range .products }}
                 <li class="list-group-item p-0 list-group-item-primary">
-                    <img src="https://images.evetech.net/types/ product[product_id] /icon?size=32">
-                     product[quantity]  x  product[product_name]  - cost per unit:  Price::format(product[cost_pu]) , value per unit:  Price::format(product[value_pu])
+                    <img src="https://images.evetech.net/types/{{ .ProductID }}/icon?size=32">
+                    {{ .Quantity }} x {{ .ProductName }}
                 </li>
-                endforeach
+                {{ end }}
             </ul>
         </div>
-        if(count(excess_products))
+        {{ if .excess }}
         <div class="card-body m-0 p-0 bg-primary text-white text-center border-0">Excess production</div>
         <div class="card-body p-0 m-0">
             <ul class="list-group p-0 rounded-0">
-                foreach (excess_products as product)
+                {{ range .excess }}
                 <li class="list-group-item p-0">
-                    <img src="https://images.evetech.net/types/ product[material_id] /icon?size=32">
-                    product[quantity]  x  product[material_name]  - sell value:  Price::format(product[sell_value])  ISK
+                    <img src="https://images.evetech.net/types/{{ .MaterialID }}/icon?size=32">
+                    {{ .Quantity }}  x  {{ .MaterialName }}
                 </li>
-                endforeach
+                {{ end }}
             </ul>
         </div>
-        endif
-        <div class="card-body m-0 p-0 bg-primary text-white text-center border-0">Cost estimates</div>
-        <div class="card-body text-primary p-0 m-0">
-            <ul class="list-group">
-                <li class="list-group-item p-1"> + products market value (+ excess): Price::format(requested_products_sell_value)  ISK
-                if (excess_products_sell_value)
-                    (+ Price::format(excess_products_sell_value)  ISK)
-                endif
-                </li>
-                <li class="list-group-item p-1"> - product/total materials cost:  Price::format(total_material_cost_consumed)  ISK /  Price::format(total_material_cost)  ISK</li>
-                <li class="list-group-item text-right p-1 if(requested_products_sell_value + excess_products_sell_value > total_material_cost) list-group-item-success else list-group-item-danger endif ">
-                    if(requested_products_sell_value > total_material_cost) + endif
-                    Price::format(requested_products_sell_value - total_material_cost)  ISK /
-                    if(requested_products_sell_value + excess_products_sell_value > total_material_cost) + endif
-                    Price::format(requested_products_sell_value + excess_products_sell_value - total_material_cost)  ISK
-                </li>
-            </ul>
-        </div>
+        {{ end }}
     </div>
 </div>
 

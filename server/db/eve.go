@@ -102,6 +102,10 @@ func (b *EVEBlueprint) IsTech2() bool {
 	return (b.MetaGroup == MetaGroupTech2)
 }
 
+func (b *EVEBlueprint) IsTech1() bool {
+	return (b.MetaGroup == MetaGroupTech1)
+}
+
 func (b *EVEBlueprint) IsReaction() bool {
 	return (b.Reaction > 0)
 }

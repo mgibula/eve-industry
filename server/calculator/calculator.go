@@ -232,7 +232,12 @@ func (material *Material) neededJobs() []int64 {
 
 	for quantityNeeded > 0 {
 		runsRequired := max(1, int64(math.Ceil(float64(quantityNeeded)/float64(material.BlueprintInfo.ManufacturingProductOutputQuantity))))
-		runsQueued := min(runsRequired, material.BlueprintInfo.ManufacturingMaxRuns)
+		runsQueued := runsRequired
+
+		// We assume T1 BPO and max runs BPC for others
+		if !material.BlueprintInfo.IsTech1() {
+			runsQueued = min(runsQueued, material.BlueprintInfo.ManufacturingMaxRuns)
+		}
 
 		quantityNeeded -= runsQueued * material.BlueprintInfo.ManufacturingProductOutputQuantity
 		result = append(result, runsQueued)

@@ -16,6 +16,7 @@ import (
 	"github.com/mgibula/eve-industry/server/config"
 	"github.com/mgibula/eve-industry/server/db"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ESIClient struct {
@@ -37,6 +38,7 @@ type esiResponse struct {
 	etag       string
 	validUntil time.Time
 	is_valid   bool
+	cached     bool
 }
 
 type esiCostIndex struct {
@@ -47,6 +49,15 @@ type esiCostIndex struct {
 type EsiCostIndices struct {
 	CostIndices   []esiCostIndex `json:"cost_indices"`
 	SolarSystemID uint64         `json:"solar_system_id"`
+}
+
+type EsiCharacterInfo struct {
+	CharacterID    uint64
+	AllianceID     int32   `json:"alliance_id"`
+	BloodlineID    int32   `json:"bloodline_id"`
+	CorporationID  int32   `json:"corporation_id"`
+	Name           string  `json:"name"`
+	SecurityStatus float32 `json:"security_status"`
 }
 
 func NewESIClient(db *gorm.DB, user db.ESIUser) ESIClient {
@@ -77,10 +88,26 @@ func (c *ESIClient) ListIndustrySystems() ([]EsiCostIndices, error) {
 	return result, nil
 }
 
+func (c *ESIClient) GetCharacterInfo(characterID uint64) (EsiCharacterInfo, error) {
+	response := c.makeRequest(http.MethodGet, fmt.Sprintf("/latest/characters/%d/", characterID), url.Values{})
+	if response.error != nil {
+		return EsiCharacterInfo{}, response.error
+	}
+
+	var result EsiCharacterInfo
+	json.Unmarshal([]byte(response.body), &result)
+
+	return result, nil
+}
+
 func (c *ESIClient) UpdateSystemCostIndices() error {
 	response := c.makeRequest(http.MethodGet, "/latest/industry/systems/", url.Values{})
 	if response.error != nil {
 		return response.error
+	}
+
+	if response.cached {
+		return nil
 	}
 
 	var esi_result []EsiCostIndices
@@ -139,18 +166,23 @@ func (c *ESIClient) fetchFromCache(method string, url string, params string) *es
 		return nil
 	}
 
-	log.Println(url, "cache hit")
+	log.Println(url, "cache hit, time-valid:", is_valid)
 	return &esiResponse{
 		status:     200,
 		body:       cached.Response,
 		validUntil: cached.ValidUntil,
 		etag:       cached.Etag,
 		is_valid:   is_valid,
+		cached:     true,
 	}
 }
 
 func (c *ESIClient) saveToCache(method string, url string, params string, response esiResponse) {
-	c.db.Create(&db.ESICall{
+
+	c.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "url"}, {Name: "params"}},
+		DoUpdates: clause.AssignmentColumns([]string{"response", "valid_until", "etag"}),
+	}).Create(&db.ESICall{
 		URL:        url,
 		Params:     params,
 		Response:   response.body,
@@ -168,10 +200,6 @@ func (c *ESIClient) makeRequest(method string, uri string, params url.Values) es
 
 	apiUrl := "https://esi.evetech.net" + uri
 	var requestBody io.Reader
-
-	if maybe_cached != nil && maybe_cached.etag != "" {
-		params.Add("If-None-Match", maybe_cached.etag)
-	}
 
 	if method == http.MethodGet {
 		apiUrl += "?" + params.Encode()
@@ -204,6 +232,9 @@ func (c *ESIClient) makeRequest(method string, uri string, params url.Values) es
 
 	request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.user.AccessToken))
 	request.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	if maybe_cached != nil && maybe_cached.etag != "" {
+		request.Header.Add("If-None-Match", maybe_cached.etag)
+	}
 
 	client := &http.Client{}
 	response, err := client.Do(request)
@@ -235,6 +266,7 @@ func (c *ESIClient) makeRequest(method string, uri string, params url.Values) es
 	} else if response.StatusCode == 304 && maybe_cached != nil {
 		log.Println("304 response code, using cached version")
 		result.body = maybe_cached.body
+		result.cached = true
 	} else {
 		result.body = string(body)
 	}

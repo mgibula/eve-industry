@@ -116,6 +116,9 @@ func IndexController(c *gin.Context) {
 	if exists {
 		esi := esi.NewESIClient(db.OpenEveDatabase(), maybe_user.(db.ESIUser))
 		esi.UpdateSystemCostIndices()
+
+		user, _ := esi.GetCharacterInfo(maybe_user.(db.ESIUser).ID)
+		log.Println(user)
 	}
 
 	layout.Render(c, "default/login.tmpl", gin.H{})

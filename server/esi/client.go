@@ -39,6 +39,16 @@ type esiResponse struct {
 	is_valid   bool
 }
 
+type esiCostIndex struct {
+	Activity  string  `json:"activity"`
+	CostIndex float32 `json:"cost_index"`
+}
+
+type EsiCostIndices struct {
+	CostIndices   []esiCostIndex `json:"cost_indices"`
+	SolarSystemID uint64         `json:"solar_system_id"`
+}
+
 func NewESIClient(db *gorm.DB, user db.ESIUser) ESIClient {
 	result := ESIClient{
 		user: user,
@@ -50,14 +60,67 @@ func NewESIClient(db *gorm.DB, user db.ESIUser) ESIClient {
 
 func (c *ESIClient) ListSkills() {
 	requestParams := url.Values{}
-	requestParams.Add("datasource", "tranquility")
 
 	response := c.makeRequest(http.MethodGet, fmt.Sprintf("/latest/characters/%d/skills/", c.user.ID), requestParams)
 	log.Println(response)
 }
 
-func (c *ESIClient) GetCharacterInfo() {
+func (c *ESIClient) ListIndustrySystems() ([]EsiCostIndices, error) {
+	response := c.makeRequest(http.MethodGet, "/latest/industry/systems/", url.Values{})
+	if response.error != nil {
+		return nil, response.error
+	}
 
+	var result []EsiCostIndices
+	json.Unmarshal([]byte(response.body), &result)
+
+	return result, nil
+}
+
+func (c *ESIClient) UpdateSystemCostIndices() error {
+	response := c.makeRequest(http.MethodGet, "/latest/industry/systems/", url.Values{})
+	if response.error != nil {
+		return response.error
+	}
+
+	var esi_result []EsiCostIndices
+	json.Unmarshal([]byte(response.body), &esi_result)
+
+	c.db.Exec("DELETE FROM system_cost_indices")
+	var indices []db.SystemCostIndices
+	indices = make([]db.SystemCostIndices, 0, len(esi_result))
+
+	for _, system := range esi_result {
+		index := db.SystemCostIndices{
+			ID: system.SolarSystemID,
+		}
+
+		for _, activity := range system.CostIndices {
+			if activity.Activity == "manufacturing" {
+				index.Manufacturing = activity.CostIndex
+			} else if activity.Activity == "researching_material_efficiency" {
+				index.MEResearch = activity.CostIndex
+			} else if activity.Activity == "researching_time_efficiency" {
+				index.PEResearch = activity.CostIndex
+			} else if activity.Activity == "copying" {
+				index.Copying = activity.CostIndex
+			} else if activity.Activity == "invention" {
+				index.Invention = activity.CostIndex
+			} else if activity.Activity == "reaction" {
+				index.Reaction = activity.CostIndex
+			}
+		}
+
+		indices = append(indices, index)
+	}
+
+	result := c.db.CreateInBatches(&indices, 1000)
+	if result.Error != nil {
+		log.Println(result.Error)
+		return result.Error
+	}
+
+	return nil
 }
 
 func (c *ESIClient) fetchFromCache(method string, url string, params string) *esiResponse {
@@ -76,6 +139,7 @@ func (c *ESIClient) fetchFromCache(method string, url string, params string) *es
 		return nil
 	}
 
+	log.Println(url, "cache hit")
 	return &esiResponse{
 		status:     200,
 		body:       cached.Response,

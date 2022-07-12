@@ -147,6 +147,16 @@ type ESICall struct {
 	Etag       string
 }
 
+type SystemCostIndices struct {
+	ID            uint64 `gorm:"primaryKey"`
+	Manufacturing float32
+	MEResearch    float32
+	PEResearch    float32
+	Copying       float32
+	Invention     float32
+	Reaction      float32
+}
+
 type Location struct {
 	gorm.Model
 	CharacterId uint64
@@ -179,6 +189,7 @@ func InitEveDatabase() {
 	db.AutoMigrate(&ESIUser{})
 	db.AutoMigrate(&ESICall{})
 	db.AutoMigrate(&Location{})
+	db.AutoMigrate(&SystemCostIndices{})
 
 	gob.Register(ESICall{})
 	gob.Register([]ESICall{})

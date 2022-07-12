@@ -151,22 +151,23 @@ func ssoCallbackHandler(c *gin.Context) {
 	expires := time.Now().Add(time.Second * time.Duration(responseData.ExpiresIn))
 
 	manager := db.OpenEveDatabase()
-	esiUser := db.ESIUser{
-		ID:            characterId,
-		CharacterName: characterName,
-		RefreshToken:  responseData.RefreshToken,
-		AccessToken:   responseData.AccessToken,
-		ValidUntil:    expires,
-	}
 
+	var esiUser db.ESIUser
 	result := manager.Find(&esiUser)
+
+	esiUser.ID = characterId
+	esiUser.CharacterName = characterName
+	esiUser.RefreshToken = responseData.RefreshToken
+	esiUser.AccessToken = responseData.AccessToken
+	esiUser.ValidUntil = expires
+
 	if result.RowsAffected > 0 {
+		log.Println("Updating ESI user")
 		manager.Save(&esiUser)
 	} else {
+		log.Println("Creating ESI user")
 		manager.Create(&esiUser)
 	}
-
-	log.Println("Logging", esiUser.CharacterName)
 
 	loggedCharacters, exists := session.Get("available_users").([]db.ESIUser)
 	if !exists {

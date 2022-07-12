@@ -3,6 +3,7 @@ package esi
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -29,6 +30,15 @@ type RefreshResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+type esiResponse struct {
+	status     int
+	body       string
+	error      error
+	etag       string
+	validUntil time.Time
+	is_valid   bool
+}
+
 func NewESIClient(db *gorm.DB, user db.ESIUser) ESIClient {
 	result := ESIClient{
 		user: user,
@@ -40,19 +50,64 @@ func NewESIClient(db *gorm.DB, user db.ESIUser) ESIClient {
 
 func (c *ESIClient) ListSkills() {
 	requestParams := url.Values{}
-	requestParams.Add("character_id", fmt.Sprint(c.user.ID))
 	requestParams.Add("datasource", "tranquility")
 
-	c.makeRequest(http.MethodGet, fmt.Sprintf("/latest/characters/%d/assets/", c.user.ID), requestParams)
+	response := c.makeRequest(http.MethodGet, fmt.Sprintf("/latest/characters/%d/skills/", c.user.ID), requestParams)
+	log.Println(response)
 }
 
 func (c *ESIClient) GetCharacterInfo() {
 
 }
 
-func (c *ESIClient) makeRequest(method string, uri string, params url.Values) (string, error) {
+func (c *ESIClient) fetchFromCache(method string, url string, params string) *esiResponse {
+	var cached db.ESICall
+
+	err := c.db.Where("url = ? and params = ?", url, params).Order("valid_until desc").First(&cached).Error
+	if err != nil {
+		log.Println(url, "not in cache")
+		return nil
+	}
+
+	is_valid := cached.ValidUntil.After(time.Now())
+	if !is_valid && cached.Etag == "" {
+		log.Println(url, "has expired and no etag")
+		c.db.Delete(&db.ESICall{}, "url = ? and params = ?", url, params)
+		return nil
+	}
+
+	return &esiResponse{
+		status:     200,
+		body:       cached.Response,
+		validUntil: cached.ValidUntil,
+		etag:       cached.Etag,
+		is_valid:   is_valid,
+	}
+}
+
+func (c *ESIClient) saveToCache(method string, url string, params string, response esiResponse) {
+	c.db.Create(&db.ESICall{
+		URL:        url,
+		Params:     params,
+		Response:   response.body,
+		ValidUntil: response.validUntil,
+		Etag:       response.etag,
+	})
+}
+
+func (c *ESIClient) makeRequest(method string, uri string, params url.Values) esiResponse {
+	paramsCacheKey := params.Encode()
+	maybe_cached := c.fetchFromCache(method, uri, paramsCacheKey)
+	if maybe_cached != nil && maybe_cached.is_valid {
+		return *maybe_cached
+	}
+
 	apiUrl := "https://esi.evetech.net" + uri
 	var requestBody io.Reader
+
+	if maybe_cached != nil && maybe_cached.etag != "" {
+		params.Add("If-None-Match", maybe_cached.etag)
+	}
 
 	if method == http.MethodGet {
 		apiUrl += "?" + params.Encode()
@@ -63,14 +118,18 @@ func (c *ESIClient) makeRequest(method string, uri string, params url.Values) (s
 
 	request, err := http.NewRequest(method, apiUrl, requestBody)
 	if err != nil {
-		return "", err
+		return esiResponse{
+			error: err,
+		}
 	}
 
 	if c.user.ValidUntil.Before(time.Now()) {
 		log.Println("Refreshing token", c.user.ValidUntil.String(), time.Now().String())
 		newToken, err := c.RefreshToken()
 		if err != nil {
-			return "", err
+			return esiResponse{
+				error: err,
+			}
 		}
 
 		c.user.AccessToken = newToken.AccessToken
@@ -85,18 +144,44 @@ func (c *ESIClient) makeRequest(method string, uri string, params url.Values) (s
 	client := &http.Client{}
 	response, err := client.Do(request)
 	if err != nil {
-		return "", err
+		return esiResponse{
+			error: err,
+		}
 	}
-	log.Println(response)
+
 	defer response.Body.Close()
 
 	// Read response body
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return "", err
+		return esiResponse{
+			error: err,
+		}
 	}
 
-	return string(body), nil
+	expires, err := time.Parse(time.RFC1123, response.Header.Get("Expires"))
+	if err != nil {
+		log.Println("Expires header invalid format", response.Header.Get("Expires"), err)
+		expires = time.Now()
+	}
+
+	var result esiResponse
+	if response.StatusCode >= 400 {
+		result.error = errors.New(string(body))
+	} else if response.StatusCode == 304 && maybe_cached != nil {
+		log.Println("304 response code, using cached version")
+		result.body = maybe_cached.body
+	} else {
+		result.body = string(body)
+	}
+
+	result.status = response.StatusCode
+	result.etag = response.Header.Get("ETag")
+	result.validUntil = expires
+
+	c.saveToCache(method, uri, paramsCacheKey, result)
+
+	return result
 }
 
 func (c *ESIClient) RefreshToken() (*RefreshResponse, error) {

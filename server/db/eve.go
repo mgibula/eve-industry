@@ -138,6 +138,15 @@ type ESIUser struct {
 	ValidUntil    time.Time
 }
 
+type ESICall struct {
+	ID         uint64 `gorm:"primaryKey"`
+	URL        string `gorm:"index:url_idx,unique"`
+	Params     string `gorm:"index:url_idx,unique"`
+	Response   string
+	ValidUntil time.Time
+	Etag       string
+}
+
 type Location struct {
 	gorm.Model
 	CharacterId uint64
@@ -168,7 +177,11 @@ func InitEveDatabase() {
 	db.AutoMigrate(&EVEDecryptor{})
 
 	db.AutoMigrate(&ESIUser{})
+	db.AutoMigrate(&ESICall{})
 	db.AutoMigrate(&Location{})
+
+	gob.Register(ESICall{})
+	gob.Register([]ESICall{})
 
 	gob.Register(ESIUser{})
 	gob.Register([]ESIUser{})

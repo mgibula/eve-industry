@@ -149,19 +149,17 @@
                 {{ end }}
             </ul>
         </div>
-        {{ if .excess }}
         <div class="card-body m-0 p-0 bg-primary text-white text-center border-0">Excess production</div>
         <div class="card-body p-0 m-0">
             <ul class="list-group p-0 rounded-0">
-                {{ range .excess }}
+                {{ range .excess }}{{ if eq .Excess 0 }}{{ continue }}{{ end }}
                 <li class="list-group-item p-0">
                     <img src="https://images.evetech.net/types/{{ .MaterialID }}/icon?size=32">
-                    {{ .Quantity }}  x  {{ .MaterialName }}
+                    {{ .Excess }}  x  {{ .MaterialName }}
                 </li>
                 {{ end }}
             </ul>
         </div>
-        {{ end }}
     </div>
 </div>
 

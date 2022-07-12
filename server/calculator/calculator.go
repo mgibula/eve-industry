@@ -19,11 +19,11 @@ type Material struct {
 	BlueprintInfo        *db.EVEBlueprint
 	MaterialID           uint64
 	MaterialName         string
-	Quantity             int64
-	PrimaryProduction    int64
+	RequestedQuantity    int64 // Requested by user
+	TotalQuantity        int64 // Total quantity needed
 	Submaterials         []db.EVEMaterial
-	SubmaterialQuantites map[uint64]int64
-	Jobs                 []int64
+	SubmaterialQuantites map[uint64]int64 // Submaterials needed for current item
+	Jobs                 []int64          // Jobs needed, sliced by max runs per bpc
 	Excess               int64
 }
 
@@ -35,15 +35,21 @@ type MaterialInfo struct {
 	IsBuilt             bool
 }
 
-type JobInfo struct {
-	BlueprintID     uint64
-	BlueprintName   string
-	Runs            int64
-	Jobs            []int64
-	ProductID       uint64
-	ProductQuantity int64
-	ME              int32
-	PE              int32
+type MaterialInfoFull struct {
+	MaterialID          uint64
+	MaterialName        string
+	Quantity            int64
+	Excess              int64
+	MaterialBlueprintID uint64
+	IsBuilt             bool
+
+	MaterialBlueprintName string
+	BuildInfo             struct {
+		Runs int64
+		Jobs []int64
+		ME   int32
+		PE   int32
+	}
 }
 
 type BlueprintSettings struct {
@@ -51,7 +57,6 @@ type BlueprintSettings struct {
 	ME        int32
 	PE        int32
 	Decryptor uint64
-	IsPrimary bool
 }
 
 func NewMaterialCalculator() MaterialCalculator {
@@ -64,24 +69,15 @@ func NewMaterialCalculator() MaterialCalculator {
 	return result
 }
 
-func (c *MaterialCalculator) AddBlueprintSettings(blueprintID uint64, me int32, pe int32, decryptor uint64, isPrimary bool) {
+func (c *MaterialCalculator) AddBlueprintSettings(blueprintID uint64, me int32, pe int32, decryptor uint64) {
 	blueprint := BlueprintSettings{
 		ME:        me,
 		PE:        pe,
 		Decryptor: decryptor,
-		IsPrimary: isPrimary,
 	}
 
 	c.EveDB.Where("ID = ?", blueprintID).Take(&blueprint.Blueprint)
 	c.BlueprintSettings[blueprintID] = blueprint
-}
-
-func (c *MaterialCalculator) GetBlueprintSettings(blueprintID uint64) *BlueprintSettings {
-	if value, exists := c.BlueprintSettings[blueprintID]; exists {
-		return &value
-	}
-
-	return nil
 }
 
 func (c *MaterialCalculator) AddQuantity(itemID uint64, name string, quantity int64, is_primary bool) {
@@ -108,54 +104,29 @@ func (c *MaterialCalculator) AddQuantity(itemID uint64, name string, quantity in
 	material.addQuantity(quantity, is_primary)
 }
 
-func (c *MaterialCalculator) GetMaterialInfo(itemID uint64) *Material {
-	return c.Materials[itemID]
-}
-
-func (c *MaterialCalculator) GetExcess() []MaterialInfo {
-	result := make([]MaterialInfo, 0)
-
-	for _, material := range c.Materials {
-		excess := material.Excess
-		if excess == 0 {
-			continue
-		}
-
-		info := MaterialInfo{
-			MaterialID:   material.MaterialID,
-			MaterialName: material.MaterialName,
-			Quantity:     excess,
-			IsBuilt:      true,
-		}
-
-		if material.BlueprintInfo != nil {
-			info.MaterialBlueprintID = material.BlueprintInfo.ID
-		}
-
-		result = append(result, info)
-	}
-
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Quantity > result[j].Quantity
-	})
-
-	return result
-}
-
-func (c *MaterialCalculator) GetMaterials() []MaterialInfo {
-	result := make([]MaterialInfo, 0)
+func (c *MaterialCalculator) GetAllMaterials() []MaterialInfoFull {
+	result := make([]MaterialInfoFull, 0)
 
 	for _, requiredMaterial := range c.Materials {
-		info := MaterialInfo{
-			MaterialID:          requiredMaterial.MaterialID,
-			MaterialName:        requiredMaterial.MaterialName,
-			Quantity:            requiredMaterial.Quantity,
-			MaterialBlueprintID: 0,
+		info := MaterialInfoFull{
+			MaterialID:   requiredMaterial.MaterialID,
+			MaterialName: requiredMaterial.MaterialName,
+			Quantity:     requiredMaterial.TotalQuantity,
+			Excess:       requiredMaterial.Excess,
 		}
 
 		if requiredMaterial.BlueprintInfo != nil {
 			info.MaterialBlueprintID = requiredMaterial.BlueprintInfo.ID
-			info.IsBuilt = (c.GetBlueprintSettings(requiredMaterial.BlueprintInfo.ID) != nil)
+			info.MaterialBlueprintName = requiredMaterial.BlueprintInfo.Name
+
+			settings := c.getBlueprintSettings(requiredMaterial.BlueprintInfo.ID)
+			if settings != nil {
+				info.IsBuilt = true
+				info.BuildInfo.Jobs = requiredMaterial.Jobs
+				info.BuildInfo.Runs = requiredMaterial.getTotalRuns()
+				info.BuildInfo.ME = settings.ME
+				info.BuildInfo.PE = settings.PE
+			}
 		}
 
 		result = append(result, info)
@@ -170,16 +141,15 @@ func (c *MaterialCalculator) GetMaterials() []MaterialInfo {
 
 func (c *MaterialCalculator) GetMaterialsFor(itemID uint64) []MaterialInfo {
 	result := make([]MaterialInfo, 0)
+	material := c.Materials[itemID]
 
-	calculatedMaterials := c.Materials[itemID].getCalculatedMaterialsforProduction()
-
-	for _, requiredMaterial := range c.Materials[itemID].Submaterials {
+	for _, submaterial := range material.Submaterials {
 		info := MaterialInfo{
-			MaterialID:          requiredMaterial.MaterialId,
-			MaterialName:        requiredMaterial.MaterialName,
-			Quantity:            calculatedMaterials[requiredMaterial.MaterialId],
-			MaterialBlueprintID: requiredMaterial.MaterialBlueprintId,
-			IsBuilt:             (c.GetBlueprintSettings(requiredMaterial.MaterialBlueprintId) != nil),
+			MaterialID:          submaterial.MaterialId,
+			MaterialName:        submaterial.MaterialName,
+			MaterialBlueprintID: submaterial.MaterialBlueprintId,
+			Quantity:            material.SubmaterialQuantites[submaterial.MaterialId],
+			IsBuilt:             c.hasBlueprintSettings(submaterial.MaterialBlueprintId),
 		}
 
 		result = append(result, info)
@@ -192,38 +162,21 @@ func (c *MaterialCalculator) GetMaterialsFor(itemID uint64) []MaterialInfo {
 	return result
 }
 
-func (c *MaterialCalculator) GetJobsInfo() []JobInfo {
-	result := make([]JobInfo, 0)
-
-	for _, material := range c.Materials {
-		if material.BlueprintInfo == nil {
-			continue
-		}
-
-		settings := c.GetBlueprintSettings(material.BlueprintInfo.ID)
-		if settings == nil {
-			continue
-		}
-
-		info := JobInfo{
-			BlueprintID:     material.BlueprintInfo.ID,
-			BlueprintName:   material.BlueprintInfo.Name,
-			Runs:            material.GetTotalRuns(),
-			Jobs:            material.GetRequiredJobs(),
-			ProductID:       material.MaterialID,
-			ProductQuantity: material.GetTotalRuns() * material.BlueprintInfo.ManufacturingProductOutputQuantity,
-			ME:              settings.ME,
-			PE:              settings.PE,
-		}
-
-		result = append(result, info)
+func (c *MaterialCalculator) getBlueprintSettings(blueprintID uint64) *BlueprintSettings {
+	if value, exists := c.BlueprintSettings[blueprintID]; exists {
+		return &value
 	}
 
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].ProductQuantity > result[j].ProductQuantity
-	})
+	return nil
+}
 
-	return result
+func (c *MaterialCalculator) hasBlueprintSettings(blueprintID uint64) bool {
+	_, exists := c.BlueprintSettings[blueprintID]
+	return exists
+}
+
+func (material *Material) neededQuantity() int64 {
+	return max(material.TotalQuantity, material.RequestedQuantity)
 }
 
 func (material *Material) neededJobs() []int64 {
@@ -246,15 +199,11 @@ func (material *Material) neededJobs() []int64 {
 	return result
 }
 
-func (material *Material) neededQuantity() int64 {
-	return max(material.Quantity, material.PrimaryProduction)
-}
-
-func (material *Material) GetRequiredJobs() []int64 {
+func (material *Material) getRequiredJobs() []int64 {
 	return material.Jobs
 }
 
-func (material *Material) GetTotalRuns() int64 {
+func (material *Material) getTotalRuns() int64 {
 	var result int64
 
 	for _, runs := range material.Jobs {
@@ -264,62 +213,24 @@ func (material *Material) GetTotalRuns() int64 {
 	return result
 }
 
-func (material *Material) GetBuildibleSubmaterials() int64 {
-	var result int64
-
-	for _, submaterial := range material.Submaterials {
-		if submaterial.MaterialBlueprintId > 0 {
-			result++
-		}
-	}
-
-	return result
-}
-
-func (material *Material) GetBuiltSubmaterials() int64 {
-	var result int64
-
-	for _, submaterial := range material.Submaterials {
-		if submaterial.MaterialBlueprintId > 0 && material.parent.GetBlueprintSettings(submaterial.MaterialBlueprintId) != nil {
-			result++
-		}
-	}
-
-	return result
-}
-
-func (material *Material) getSubmaterialsInfoForProduction() []db.EVEMaterial {
-	return material.Submaterials
-}
-
-func (material *Material) getCalculatedMaterialsforProduction() map[uint64]int64 {
-	if material.parent.GetBlueprintSettings(material.BlueprintInfo.ID) == nil {
-		result := make(map[uint64]int64)
-		result[material.MaterialID] = material.Quantity
-		return result
-	} else {
-		return material.SubmaterialQuantites
-	}
-}
-
 func (material *Material) addQuantity(quantity int64, is_primary bool) {
-	material.Quantity += quantity
+	material.TotalQuantity += quantity
 
 	if is_primary {
-		material.PrimaryProduction += quantity
+		material.RequestedQuantity += quantity
 	}
 
 	if material.BlueprintInfo == nil {
 		return
 	}
 
-	settings := material.parent.GetBlueprintSettings(material.BlueprintInfo.ID)
+	settings := material.parent.getBlueprintSettings(material.BlueprintInfo.ID)
 	if settings == nil {
 		return
 	}
 
 	material.Jobs = material.neededJobs()
-	material.Excess = material.GetTotalRuns()*material.BlueprintInfo.ManufacturingProductOutputQuantity - material.neededQuantity()
+	material.Excess = material.getTotalRuns()*material.BlueprintInfo.ManufacturingProductOutputQuantity - material.neededQuantity()
 
 	for _, submaterial := range material.Submaterials {
 		old_quantity := material.SubmaterialQuantites[submaterial.MaterialId]

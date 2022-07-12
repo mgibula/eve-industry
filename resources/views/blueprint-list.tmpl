@@ -44,8 +44,10 @@
 <textarea class="form-control rounded-0 border-1" rows="20">
 Jobs to run:
 -------------------------------------
-{{ range .jobs }}    {{ .Runs }} x {{ .BlueprintName }}
+{{ range .materials }}{{ if not .IsBuilt }}{{ continue }}{{ end }}    {{ .BuildInfo.Runs }} x {{ .MaterialBlueprintName }}
 {{ end }}
+Jobs to run:
+-------------------------------------
 Materials required:
 -------------------------------------
 {{ range .materials }}{{ if not .IsBuilt }}{{ .MaterialName }}  {{ .Quantity }}

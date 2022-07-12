@@ -95,7 +95,7 @@ func (l *productionPlans) getSelectedPlan() *productionPlan {
 func (l *productionPlans) purgeSecondaryBlueprints() {
 	calculator := NewMaterialCalculator()
 	for _, plan := range l.Plans {
-		calculator.AddBlueprintSettings(plan.Blueprint.ID, plan.ME, plan.PE, plan.Decryptor, true)
+		calculator.AddBlueprintSettings(plan.Blueprint.ID, plan.ME, plan.PE, plan.Decryptor)
 	}
 
 	for _, plan := range l.Plans {
@@ -104,8 +104,10 @@ func (l *productionPlans) purgeSecondaryBlueprints() {
 
 	newPlans := make([]*productionPlan, 0)
 
+	materials := calculator.GetAllMaterials()
+
 	for _, plan := range l.Plans {
-		if calculator.GetMaterialInfo(plan.Blueprint.ManufacturingProductId).GetTotalRuns() > 0 {
+		if getMaterialInfo(plan.Blueprint.ManufacturingProductId, materials).BuildInfo.Runs > 0 {
 			newPlans = append(newPlans, plan)
 		}
 	}
@@ -323,21 +325,21 @@ func renderBlueprintCard(c *gin.Context) {
 
 	calculator := NewMaterialCalculator()
 	for _, plan := range plans.Plans {
-		calculator.AddBlueprintSettings(plan.Blueprint.ID, plan.ME, plan.PE, plan.Decryptor, true)
+		calculator.AddBlueprintSettings(plan.Blueprint.ID, plan.ME, plan.PE, plan.Decryptor)
 	}
 
 	for _, plan := range plans.Plans {
 		calculator.AddQuantity(plan.Blueprint.ManufacturingProductId, plan.Blueprint.ManufacturingProductName, plan.Blueprint.ManufacturingProductOutputQuantity*plan.Runs, true)
 	}
 
+	materials := calculator.GetAllMaterials()
+
 	for _, plan := range plans.Plans {
-		info := calculator.GetMaterialInfo(plan.Blueprint.ManufacturingProductId)
-		plan.TotalQuantity = info.GetTotalRuns() * plan.Blueprint.ManufacturingProductOutputQuantity
-		plan.TotalRuns = info.GetTotalRuns()
-		plan.AdditionalRuns = info.GetTotalRuns() - plan.Runs
-		plan.Buildable = info.GetBuildibleSubmaterials()
-		plan.Built = info.GetBuiltSubmaterials()
-		plan.Jobs = info.Jobs
+		info := getMaterialInfo(plan.Blueprint.ManufacturingProductId, materials)
+		plan.Jobs = info.BuildInfo.Jobs
+		plan.TotalRuns = info.BuildInfo.Runs
+		plan.AdditionalRuns = info.BuildInfo.Runs - plan.Runs
+		plan.TotalQuantity = info.BuildInfo.Runs * plan.Blueprint.ManufacturingProductOutputQuantity
 	}
 
 	evedb := db.OpenEveDatabase()
@@ -370,7 +372,7 @@ func renderBlueprintCard(c *gin.Context) {
 		"decryptors": decryptors,
 		"materials":  calculator.GetMaterialsFor(selectedPlan.Blueprint.ManufacturingProductId),
 		"products":   products,
-		"excess":     calculator.GetExcess(),
+		"excess":     calculator.GetAllMaterials(),
 	})
 }
 
@@ -379,25 +381,42 @@ func renderBlueprintList(c *gin.Context) {
 
 	calculator := NewMaterialCalculator()
 	for _, plan := range plans.Plans {
-		calculator.AddBlueprintSettings(plan.Blueprint.ID, plan.ME, plan.PE, plan.Decryptor, true)
+		calculator.AddBlueprintSettings(plan.Blueprint.ID, plan.ME, plan.PE, plan.Decryptor)
 	}
 
 	for _, plan := range plans.Plans {
 		calculator.AddQuantity(plan.Blueprint.ManufacturingProductId, plan.Blueprint.ManufacturingProductName, plan.Blueprint.ManufacturingProductOutputQuantity*plan.Runs, true)
 	}
 
+	materials := calculator.GetAllMaterials()
+
 	for _, plan := range plans.Plans {
-		info := calculator.GetMaterialInfo(plan.Blueprint.ManufacturingProductId)
-		plan.TotalQuantity = info.GetTotalRuns() * plan.Blueprint.ManufacturingProductOutputQuantity
-		plan.TotalRuns = info.GetTotalRuns()
-		plan.AdditionalRuns = info.GetTotalRuns() - plan.Runs
-		plan.Buildable = info.GetBuildibleSubmaterials()
-		plan.Built = info.GetBuiltSubmaterials()
+		info := getMaterialInfo(plan.Blueprint.ManufacturingProductId, materials)
+		plan.TotalQuantity = info.Quantity
+		plan.TotalRuns = info.BuildInfo.Runs
+		plan.AdditionalRuns = info.BuildInfo.Runs - plan.Runs
+
+		submaterials := calculator.GetMaterialsFor(plan.Blueprint.ManufacturingProductId)
+		for _, submaterial := range submaterials {
+			plan.Buildable++
+			if submaterial.IsBuilt {
+				plan.Built++
+			}
+		}
 	}
 
 	layout.Render(c, "ajax/blueprint-list.tmpl", gin.H{
 		"production": plans,
-		"jobs":       calculator.GetJobsInfo(),
-		"materials":  calculator.GetMaterials(),
+		"materials":  calculator.GetAllMaterials(),
 	})
+}
+
+func getMaterialInfo(materialID uint64, materials []MaterialInfoFull) MaterialInfoFull {
+	for _, material := range materials {
+		if material.MaterialID == materialID {
+			return material
+		}
+	}
+
+	return MaterialInfoFull{}
 }
